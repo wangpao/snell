@@ -17,7 +17,7 @@ fail() {
 }
 
 # Function to get system information
-sysinfo_() {
+sysinfo_(){
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         os=$NAME
@@ -40,7 +40,7 @@ sysinfo_() {
     fi
 
     # Get virtualization technology
-    if [ "$(systemd-detect-virt)" != "none" ]; then
+    if [ $(systemd-detect-virt) != "none" ]; then
         virt_tech=$(systemd-detect-virt)
     fi
 
@@ -62,7 +62,7 @@ update_() {
 
 # Function to install BBRv3
 install_bbrv3_() {
-    if [ "$(uname -m)" == "x86_64" ]; then
+    if [ $(uname -m) == "x86_64" ]; then
         wget https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/BBR/BBRv3/x86_64/linux-headers-6.4.0+-amd64.deb -O /root/linux-headers-6.4.0+-amd64.deb
         if [ ! -f /root/linux-headers-6.4.0+-amd64.deb ]; then
             fail "BBRv3 download failed"
@@ -74,16 +74,16 @@ install_bbrv3_() {
             rm /root/linux-headers-6.4.0+-amd64.deb
             return 1
         fi
-        wget https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/BBR/BBRv3/x86_64/linux-libc-dev-6.4.0-amd64.deb -O /root/linux-libc-dev-6.4.0-amd64.deb
-        if [ ! -f /root/linux-libc-dev-6.4.0-amd64.deb ]; then
+        wget https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/BBR/BBRv3/x86_64/linux-libc-dev_-6.4.0-amd64.deb -O /root/linux-libc-dev_-6.4.0-amd64.deb
+        if [ ! -f /root/linux-libc-dev_-6.4.0-amd64.deb ]; then
             fail "BBRv3 download failed"
             rm /root/linux-headers-6.4.0+-amd64.deb /root/linux-image-6.4.0+-amd64.deb
             return 1
         fi
-        apt install -y /root/linux-headers-6.4.0+-amd64.deb /root/linux-image-6.4.0+-amd64.deb /root/linux-libc-dev-6.4.0-amd64.deb
+        apt install /root/linux-headers-6.4.0+-amd64.deb /root/linux-image-6.4.0+-amd64.deb /root/linux-libc-dev_-6.4.0-amd64.deb
         # Clean up
-        rm /root/linux-headers-6.4.0+-amd64.deb /root/linux-image-6.4.0+-amd64.deb /root/linux-libc-dev-6.4.0-amd64.deb
-    elif [ "$(uname -m)" == "aarch64" ]; then
+        rm /root/linux-headers-6.4.0+-amd64.deb /root/linux-image-6.4.0+-amd64.deb /root/linux-libc-dev_-6.4.0-amd64.deb
+    elif [ $(uname -m) == "aarch64" ]; then
         wget https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/BBR/BBRv3/ARM64/linux-headers-6.4.0+-arm64.deb -O /root/linux-headers-6.4.0+-arm64.deb
         if [ ! -f /root/linux-headers-6.4.0+-arm64.deb ]; then
             fail "BBRv3 download failed"
@@ -95,15 +95,15 @@ install_bbrv3_() {
             rm /root/linux-headers-6.4.0+-arm64.deb
             return 1
         fi
-        wget https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/BBR/BBRv3/ARM64/linux-libc-dev-6.4.0-arm64.deb -O /root/linux-libc-dev-6.4.0-arm64.deb
-        if [ ! -f /root/linux-libc-dev-6.4.0-arm64.deb ]; then
+        wget https://raw.githubusercontent.com/jerry048/Seedbox-Components/main/BBR/BBRv3/ARM64/linux-libc-dev_-6.4.0-arm64.deb -O /root/linux-libc-dev_-6.4.0-arm64.deb
+        if [ ! -f /root/linux-libc-dev_-6.4.0-arm64.deb ]; then
             fail "BBRv3 download failed"
-            rm /root/linux-headers-6.4.0+-arm64.deb /root/linux-image-6.4.0+-arm64.deb
+            rm /root/linux-headers-6.4.0+-arm64.deb linux-image-6.4.0+-arm64.deb
             return 1
         fi
-        apt install -y /root/linux-headers-6.4.0+-arm64.deb /root/linux-image-6.4.0+-arm64.deb /root/linux-libc-dev-6.4.0-arm64.deb
+        apt install /root/linux-headers-6.4.0+-arm64.deb /root/linux-image-6.4.0+-arm64.deb /root/linux-libc-dev_-6.4.0-arm64.deb
         # Clean up
-        rm /root/linux-headers-6.4.0+-arm64.deb /root/linux-image-6.4.0+-arm64.deb /root/linux-libc-dev-6.4.0-arm64.deb
+        rm /root/linux-headers-6.4.0+-arm64.deb /root/linux-image-6.4.0+-arm64.deb /root/linux-libc-dev_-6.4.0-arm64.deb
     else
         fail "$(uname -m) is not supported"
     fi
@@ -113,6 +113,7 @@ install_bbrv3_() {
 # Main script execution
 sysinfo_
 update_
+clear
 info "安装BBRv3"
 if [[ "$virt_tech" =~ "LXC" ]] || [[ "$virt_tech" =~ "lxc" ]]; then
     fail "不支持LXC"

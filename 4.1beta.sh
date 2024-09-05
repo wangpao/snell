@@ -358,7 +358,7 @@ Check_Update() {
     else
         colorEcho $BLUE " 当前已是最新版本(v4.1),无需升级"
     fi
-}
+
 
 checkSystem
 menu() {

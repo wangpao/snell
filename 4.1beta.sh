@@ -23,8 +23,8 @@ install_both() {
     echo "Installing Snell and ShadowTLS..."
     # Snell Installation
     sudo apt update && sudo apt install -y wget unzip vim
-    wget https://dl.nssurge.com/snell/snell-server-v4.1-linux-amd64.zip
-    sudo unzip snell-server-v4.1-linux-amd64.zip -d /usr/local/bin
+    wget https://dl.nssurge.com/snell/snell-server-v4.1.0-linux-amd64.zip
+    sudo unzip snell-server-v4.1.0-linux-amd64.zip -d /usr/local/bin
     chmod +x /usr/local/bin/snell-server
     read -p "Enter the PSK for Snell (press enter to generate a random one): " snell_psk
     snell_psk=${snell_psk:-$(generate_random_string)}

@@ -120,7 +120,7 @@ Install_dependency(){
 Download_snell(){
     rm -rf /etc/snell /tmp/snell
     mkdir -p /etc/snell /tmp/snell
-    DOWNLOAD_LINK="https://dl.nssurge.com/snell/snell-server-v4.1.0-linux-amd64.zip"
+    DOWNLOAD_LINK="https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-amd64.zip"
     colorEcho $YELLOW "下载Snell: ${DOWNLOAD_LINK}"
     wget -O /tmp/snell/snell.zip ${DOWNLOAD_LINK}
     unzip /tmp/snell/snell.zip -d /tmp/snell/
@@ -270,7 +270,7 @@ psk = ${PSK}
 ipv6 = false
 obfs = off
 tfo = true
-# v4.1.0
+# v4.1.1
 EOF
 }
 
@@ -443,7 +443,7 @@ Upgrade_snell() {
     colorEcho $YELLOW "旧版本已备份为 snell.old"
 
     # 下载新版本
-    DOWNLOAD_LINK="https://dl.nssurge.com/snell/snell-server-v4.1.0-linux-amd64.zip"
+    DOWNLOAD_LINK="https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-amd64.zip"
     colorEcho $YELLOW "下载新版Snell: ${DOWNLOAD_LINK}"
     wget -O /tmp/snell.zip ${DOWNLOAD_LINK}
     

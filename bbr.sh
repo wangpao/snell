@@ -10,11 +10,15 @@ else
 fi
 
 # 检测内核版本
-kernel_version=$(uname -r)
+kernel_version=$(uname -r | awk -F- '{print $1}')  # 只提取主版本号和次版本号，例如 6.8.0
 echo "内核版本：$kernel_version"
 
 # 检查内核是否支持 BBR (>= 4.9)
-if (( $(echo "$kernel_version >= 4.9" | bc -l) )); then
+compare_versions() {
+  test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1";
+}
+
+if compare_versions 4.9 "$kernel_version"; then
   echo "内核版本 >= 4.9，支持 BBR。"
 else
   echo "内核版本 < 4.9，可能不支持 BBR。"

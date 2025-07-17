@@ -6,6 +6,10 @@ YELLOW="\033[33m"
 BLUE="\033[36m"
 PLAIN='\033[0m'
 
+# Snell 最新版本信息 (方便统一管理和更新)
+LATEST_SNELL_VER="v5.0.0"
+LATEST_DOWNLOAD_LINK="https://dl.nssurge.com/snell/snell-server-${LATEST_SNELL_VER}-linux-amd64.zip"
+
 IP4=`curl -sL -4 ip.sb`
 IP6=`curl -sL -6 ip.sb`
 CPU=`uname -m`
@@ -120,9 +124,12 @@ Install_dependency(){
 Download_snell(){
     rm -rf /etc/snell /tmp/snell
     mkdir -p /etc/snell /tmp/snell
-    DOWNLOAD_LINK="https://dl.nssurge.com/snell/snell-server-v5.0.0-linux-amd64.zip"
-    colorEcho $YELLOW "下载Snell: ${DOWNLOAD_LINK}"
-    wget -O /tmp/snell/snell.zip ${DOWNLOAD_LINK}
+    colorEcho $YELLOW "下载Snell: ${LATEST_DOWNLOAD_LINK}"
+    wget -O /tmp/snell/snell.zip ${LATEST_DOWNLOAD_LINK}
+    if [[ $? -ne 0 ]]; then
+        colorEcho $RED "下载 Snell 失败, 请检查网络或链接有效性。"
+        exit 1
+    fi
     unzip /tmp/snell/snell.zip -d /tmp/snell/
     mv /tmp/snell/snell-server /etc/snell/snell
     chmod +x /etc/snell/snell
@@ -135,6 +142,10 @@ Download_stls() {
     DOWNLOAD_LINK="https://github.com/ihciah/shadow-tls/releases/download/${DOWN_VER}/shadow-tls-x86_64-unknown-linux-musl"
     colorEcho $YELLOW "下载ShadowTLS: ${DOWNLOAD_LINK}"
     curl -L -H "Cache-Control: no-cache" -o /etc/snell/shadowtls ${DOWNLOAD_LINK}
+    if [[ $? -ne 0 ]]; then
+        colorEcho $RED "下载 ShadowTls 失败, 请检查网络或链接有效性。"
+        exit 1
+    fi
     chmod +x /etc/snell/shadowtls
 }
 
@@ -270,7 +281,7 @@ psk = ${PSK}
 ipv6 = false
 obfs = off
 tfo = true
-# v4.1.1
+# ${LATEST_SNELL_VER}
 EOF
 }
 
@@ -281,7 +292,7 @@ Install_snell(){
     Write_config
     Deploy_snell
     Install_stls
-    colorEcho $BLUE "安装完成"
+    colorEcho $GREEN "安装完成"
     ShowInfo
 }
 
@@ -291,14 +302,13 @@ Install_stls() {
     Deploy_stls
 }
 
-Restart_snell(){
+Restart_all(){
     systemctl restart snell
-    colorEcho $BLUE " Snell已启动"
-}
-
-Restart_stls(){
-    systemctl restart shadowtls
-    colorEcho $BLUE " ShadowTls已重启"
+    colorEcho $BLUE "Snell已重启"
+    if [[ -f "$stls_conf" ]]; then
+        systemctl restart shadowtls
+        colorEcho $BLUE "ShadowTls已重启"
+    fi
 }
 
 Stop_snell(){
@@ -306,33 +316,30 @@ Stop_snell(){
     colorEcho $BLUE " Snell已停止"
 }
 
-Uninstall_snell(){
-    read -p $' 是否卸载Snell？[y/n]\n (默认n, 回车): ' answer
+Uninstall_all(){
+    read -p $' 是否卸载Snell和ShadowTls？[y/n]\n (默认n, 回车): ' answer
     if [[ "${answer}" = "y" ]]; then
+        systemctl stop snell >/dev/null 2>&1
+        systemctl disable snell >/dev/null 2>&1
+        rm -f /etc/systemd/system/snell.service
+
 	if [[ -f "$stls_conf" ]]; then
-		systemctl stop snell shadowtls
-		systemctl disable snell shadowtls >/dev/null 2>&1
-		rm -rf /etc/systemd/system/snell.service
-		rm -rf /etc/systemd/system/shadowtls.service
-		rm -rf /etc/snell
-		systemctl daemon-reload
-		colorEcho $BLUE " Snell已经卸载完毕"
-	else
-		systemctl stop snell
-		systemctl disable snell >/dev/null 2>&1
-		rm -rf /etc/systemd/system/snell.service
-		rm -rf /etc/snell
-		systemctl daemon-reload
-		colorEcho $BLUE " Snell已经卸载完毕"
+		systemctl stop shadowtls >/dev/null 2>&1
+		systemctl disable shadowtls >/dev/null 2>&1
+		rm -f /etc/systemd/system/shadowtls.service
 	fi
+ 
+	rm -rf /etc/snell
+	systemctl daemon-reload
+	colorEcho $GREEN "Snell 及 ShadowTls 已经卸载完毕"
     else
-	colorEcho $BLUE " 取消卸载"
+	colorEcho $YELLOW "取消卸载"
     fi
 }
 
 ShowInfo() {
     if [[ ! -f $snell_conf ]]; then
-	colorEcho $RED " Snell未安装"
+	colorEcho $RED "Snell未安装"
  	exit 1
     fi
     echo ""
@@ -383,7 +390,7 @@ outputSnell() {
     echo -e "   ${BLUE}Snell密钥(PSK)：${PLAIN} ${RED}${psk}${PLAIN}"
     echo -e "   ${BLUE}IPV6：${PLAIN} ${RED}${ipv6}${PLAIN}"
     echo -e "   ${BLUE}混淆(OBFS)：${PLAIN} ${RED}${obfs}${PLAIN}"
-    echo -e "   ${BLUE}TCP记忆(TFO)：${PLAIN} ${RED}${tfo}${PLAIN}"
+    echo -e "   ${BLUE}TCP加速(TFO)：${PLAIN} ${RED}${tfo}${PLAIN}"
     echo -e "   ${BLUE}Snell版本(VER)：${PLAIN} ${RED}${ver}${PLAIN}"
 }
 
@@ -395,94 +402,135 @@ outputSTLS() {
 }
 
 Change_snell(){
-    tmp3=`grep '#' ${snell_conf} | awk -F '# ' '{print $2}'`
-    Generate_conf
+    colorEcho $BLUE "开始修改 Snell 配置..."
+    Generate_conf # 获取新的 PORT 和 PSK
+    
+    # 如果ShadowTls已安装，需要更新其启动参数中的Snell端口
     if [[ -f "$stls_conf" ]]; then
-	if [[ ${V6} = "true" ]]; then
-		SV6="::0"
-		SPORT=`grep listen ${stls_conf} | cut -d- -f7 | cut -d: -f2`
-		PASS=`grep password ${stls_conf} | cut -d- -f13 | cut -d " " -f 2`
-		DOMAIN=`grep password ${stls_conf} | cut -d- -f11 | cut -d " " -f 2`
-	else
-		SV6="0.0.0.0"
-		SPORT=`grep listen ${stls_conf} | cut -d- -f7 | cut -d: -f4`
-		PASS=`grep password ${stls_conf} | cut -d- -f13 | cut -d " " -f 2`
-		DOMAIN=`grep password ${stls_conf} | cut -d- -f11 | cut -d " " -f 2`
-	fi
-	Deploy_stls
+        colorEcho $YELLOW "检测到ShadowTls，将同步更新其配置..."
+        GetConfig_stls # 获取当前的 sport, pass, domain
+        SPORT=${sport} # 赋值给大写变量以供Deploy_stls使用
+        PASS=${pass}
+        DOMAIN=${domain}
+        Deploy_stls # 使用新的PORT和旧的STLS参数重新生成服务文件
     fi
-    vers=$tmp3
-    Write_config
+
+    Write_config # 写入新的Snell配置文件
     systemctl restart snell
-    colorEcho $BLUE " 修改配置成功"
+    colorEcho $GREEN "修改配置成功！"
     ShowInfo
 }
 
 Change_stls() {
-    PORT=`grep listen ${snell_conf} | awk -F '=' '{print $2}' | cut -d: -f4`
-    if [[ -f "$stls_conf" ]]; then
-	V6=`grep ipv6 ${snell_conf} | awk -F '= ' '{print $2}'`
-	Generate_stls
-	Deploy_stls
-	colorEcho $BLUE " 修改配置成功"
-	ShowInfo
-    else
-	colorEcho $RED " 未安装ShadowTls"
+    if [[ ! -f "$stls_conf" ]]; then
+        colorEcho $RED "未安装ShadowTls，无法修改。"
+        return
     fi
+    colorEcho $BLUE "开始修改 ShadowTls 配置..."
+    GetConfig # 获取当前的 Snell port
+    PORT=${port} # 赋值给大写变量以供Deploy_stls使用
+    Generate_stls # 获取新的 SPORT, DOMAIN, PASS
+    Deploy_stls # 部署新的ShadowTls服务
+    colorEcho $GREEN "修改配置成功！"
+    ShowInfo
 }
 
 Upgrade_snell() {
+    if [[ ! -f "$snell_conf" ]]; then
+        colorEcho $RED "Snell未安装，无法升级。"
+        return
+    fi
+    
+    installed_ver=$(grep '#' ${snell_conf} | awk -F '# ' '{print $2}')
+    if [[ -z "$installed_ver" ]]; then
+        colorEcho $YELLOW "无法检测到已安装版本，将尝试直接升级。"
+    elif [[ "$installed_ver" == "$LATEST_SNELL_VER" ]]; then
+        colorEcho $GREEN "恭喜！当前已是最新版本 ($LATEST_SNELL_VER)，无需升级。"
+        return
+    fi
+
+    colorEcho $YELLOW "发现新版本！"
+    colorEcho $BLUE "当前版本: ${installed_ver:-未知}"
+    colorEcho $BLUE "最新版本: ${LATEST_SNELL_VER}"
+    read -p "是否要升级? [y/n] (默认y, 回车): " answer
+    [[ -z "$answer" ]] && answer="y"
+    if [[ "$answer" != "y" ]]; then
+        colorEcho $YELLOW "已取消升级。"
+        return
+    fi
+
     colorEcho $BLUE "开始升级Snell..."
-    
-    # 停止Snell服务
     systemctl stop snell
-    colorEcho $YELLOW "Snell服务已停止"
-
-    # 备份旧版本
-    mv /etc/snell/snell /etc/snell/snell.old
-    colorEcho $YELLOW "旧版本已备份为 snell.old"
-
-    # 下载新版本
-    DOWNLOAD_LINK="https://dl.nssurge.com/snell/snell-server-v4.1.1-linux-amd64.zip"
-    colorEcho $YELLOW "下载新版Snell: ${DOWNLOAD_LINK}"
-    wget -O /tmp/snell.zip ${DOWNLOAD_LINK}
     
-    # 解压并安装新版本
+    # 下载新版本
+    colorEcho $YELLOW "下载新版Snell: ${LATEST_DOWNLOAD_LINK}"
+    wget -O /tmp/snell.zip ${LATEST_DOWNLOAD_LINK}
+    if [[ $? -ne 0 ]]; then
+        colorEcho $RED "下载新版本失败，升级已中止。"
+        systemctl start snell
+        return
+    fi
+    
     unzip -o /tmp/snell.zip -d /tmp/
     mv /tmp/snell-server /etc/snell/snell
     chmod +x /etc/snell/snell
-    
-    # 清理临时文件
     rm -f /tmp/snell.zip
+    
+    # 更新配置文件中的版本号
+    sed -i "s/^# .*/# ${LATEST_SNELL_VER}/" "${snell_conf}"
 
-    # 重启Snell服务
     systemctl start snell
-    colorEcho $GREEN "Snell已升级并重新启动"
-
-    # 验证新版本
-    NEW_VERSION=$(/etc/snell/snell --version)
-    colorEcho $BLUE "当前Snell版本: ${NEW_VERSION}"
+    colorEcho $GREEN "Snell已成功升级到 ${LATEST_SNELL_VER} 并重新启动！"
 }
 
-checkSystem
+changeMenu() {
+    clear
+    echo "################################"
+    echo -e "#      ${YELLOW}修改配置子菜单${PLAIN}          #"
+    echo "################################"
+    echo ""
+    echo -e "  ${GREEN}1.${PLAIN}  修改 Snell 配置 (端口/密钥)"
+    echo -e "  ${GREEN}2.${PLAIN}  修改 ShadowTls 配置 (端口/密码)"
+    echo -e "  ${GREEN}0.${PLAIN}  返回主菜单"
+    echo ""
+    read -p " 请选择操作[0-2]：" answer
+    case $answer in
+        0)
+            menu
+            ;;
+        1)
+            Change_snell
+            ;;
+        2)
+            Change_stls
+            ;;
+        *)
+            colorEcho $RED " 请选择正确的操作！"
+            sleep 2s
+            changeMenu
+            ;;
+    esac
+}
+
 menu() {
 	clear
 	echo "################################"
 	echo -e "#      ${RED}Snell一键安装脚本${PLAIN}       #"
 	echo "################################"
 	echo " ----------------------"
-	echo -e "  ${GREEN}1.${PLAIN}  安装Snell和ShadowTLS"
-	echo -e "  ${GREEN}2.${PLAIN}  ${RED}卸载Snell和ShadowTLS${PLAIN}"
-	echo -e "  ${GREEN}3.${PLAIN}  重启Snell和ShadowTLS"
+	echo -e "  ${GREEN}1.${PLAIN}  安装 Snell 和 ShadowTLS"
+	echo -e "  ${GREEN}2.${PLAIN}  ${RED}卸载 Snell 和 ShadowTLS${PLAIN}"
+	echo -e "  ${GREEN}3.${PLAIN}  重启 Snell 和 ShadowTLS"
 	echo -e "  ${GREEN}4.${PLAIN}  查看配置"
-	echo -e "  ${GREEN}5.${PLAIN}  升级Snell"
+    echo -e "  ${GREEN}5.${PLAIN}  修改配置"
+	echo -e "  ${GREEN}6.${PLAIN}  升级 Snell"
 	echo -e "  ${GREEN}0.${PLAIN}  退出"
 	echo ""
 	echo -n " 当前状态："
 	statusText
 	echo 
 
-	read -p " 请选择操作[0-5]：" answer
+	read -p " 请选择操作[0-6]：" answer
 	case $answer in
 		0)
 			exit 0
@@ -491,16 +539,18 @@ menu() {
 			Install_snell
 			;;
 		2)
-			Uninstall_snell
+			Uninstall_all
 			;;
 		3)
-			Restart_snell
-			Restart_stls
+			Restart_all
 			;;
 		4)
 			ShowInfo
 			;;
-		5)
+        5)
+            changeMenu
+            ;;
+		6)
 			Upgrade_snell
 			;;
 		*)
@@ -510,4 +560,6 @@ menu() {
 			;;
 	esac
 }
+
+checkSystem
 menu

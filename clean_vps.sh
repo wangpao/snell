@@ -2,6 +2,7 @@
 
 # =================================================================
 #               VPS 彻底清理脚本 for Ubuntu 22.04+
+#                 (无localepurge外部工具依赖版)
 # =================================================================
 #  本脚本会执行深度系统清理，包括删除日志、缓存、文档和语言包。
 #  请仅在确认服务器上没有重要文件时使用！
@@ -30,7 +31,6 @@ check_root() {
 
 # --- 获取可用磁盘空间 (单位: KB) ---
 get_available_space_kb() {
-    # 使用df -k确保单位统一为KB，并提取根分区的可用空间
     df -k / | awk 'NR==2 {print $4}'
 }
 
@@ -71,11 +71,10 @@ clean_temp_files() {
     rm -f /root/.bash_history
     colorEcho $GREEN "  -> 正在清理所有用户的缓存目录..."
     rm -rf /root/.cache/*
-    # 为避免删除重要结构，只清空.cache目录内容，不删除目录本身
     find /home -type d -name ".cache" -exec rm -rf {}/* \;
 }
 
-# 4. 系统缓存清理 (部分与包管理器重叠，但确保彻底)
+# 4. 系统缓存清理
 clean_system_caches() {
     colorEcho $BLUE "\n[4/6] 正在执行系统缓存清理..."
     colorEcho $GREEN "  -> 正在清理已下载的deb包缓存..."
@@ -93,18 +92,22 @@ clean_docs_manuals() {
     rm -rf /usr/share/info/*
 }
 
-# 6. 语言包清理
+# 6. 语言包清理 (手动实现，无外部依赖)
 clean_language_packs() {
     colorEcho $BLUE "\n[6/6] 正在执行非中/英文语言包清理..."
-    # 检查 localepurge 是否安装
-    if ! command -v localepurge >/dev/null 2>&1; then
-        colorEcho $YELLOW "  -> 未找到 localepurge，正在自动安装..."
-        # 预先配置 debconf，避免安装时出现交互式提示
-        echo "localepurge localepurge/nopurge multiselect en,en_US,en_US.UTF-8,zh,zh_CN,zh_CN.UTF-8" | debconf-set-selections
-        apt-get install -y localepurge > /dev/null 2>&1
-    fi
-    colorEcho $GREEN "  -> 正在运行 localepurge 清理多余语言包..."
-    localepurge
+    # 定义要保留的语言目录。保留 en*, zh*, C, C.UTF-8 是一个安全的选择。
+    # locale-purge 文件也需要保留，它包含了 localepurge 的配置。
+    find /usr/share/locale -maxdepth 1 -type d -not \( \
+        -name "en" -o \
+        -name "en_*" -o \
+        -name "zh" -o \
+        -name "zh_*" -o \
+        -name "C" -o \
+        -name "C.UTF-8" -o \
+        -name "locale-langpack" -o \
+        -name "locale" \
+    \) -exec rm -rf {} +
+    colorEcho $GREEN "  -> 多余语言包清理完成。"
 }
 
 # --- 主函数 ---
@@ -121,20 +124,17 @@ main() {
     colorEcho $RED "请确保您了解其后果，并且服务器上没有需要保留的数据。"
     echo ""
 
-    # 获取并显示清理前的磁盘空间
     local space_before_kb=$(get_available_space_kb)
     local space_before_mb=$(echo "scale=2; $space_before_kb / 1024" | bc)
     colorEcho $BLUE "清理前可用空间: ${space_before_mb} MB"
     echo ""
 
-    # 最终确认
     read -p $'请再次确认是否执行清理操作？请输入大写的 "YES" 继续: ' confirmation
     if [[ "$confirmation" != "YES" ]]; then
         colorEcho $YELLOW "操作已取消。"
         exit 0
     fi
     
-    # 开始执行清理
     clean_package_manager
     clean_system_logs
     clean_temp_files
@@ -147,11 +147,9 @@ main() {
     colorEcho $YELLOW "========================================================"
     echo ""
     
-    # 获取并显示清理后的磁盘空间
     local space_after_kb=$(get_available_space_kb)
     local space_after_mb=$(echo "scale=2; $space_after_kb / 1024" | bc)
     
-    # 计算释放的空间
     local freed_kb=$((space_after_kb - space_before_kb))
     local freed_mb=$(echo "scale=2; $freed_kb / 1024" | bc)
     
